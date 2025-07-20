@@ -1,356 +1,486 @@
-# System Design Document
-## UNNES Document Chat System
+# UNNES Document Chat System - System Design
 
-### 1. System Overview
+## 1. System Overview
 
-UNNES Document Chat adalah sistem berbasis web yang memungkinkan mahasiswa dan staff UNNES untuk mengunggah dokumen dan berinteraksi dengan dokumen tersebut menggunakan teknologi AI (Large Language Model) melalui interface chat. Sistem ini menggunakan pendekatan RAG (Retrieval Augmented Generation) untuk memberikan respons yang akurat berdasarkan konten dokumen yang diunggah.
+### 1.1 Purpose
+UNNES Document Chat System adalah aplikasi berbasis web yang memungkinkan pengguna untuk:
+- Mengupload dokumen dalam berbagai format
+- Melakukan chat dengan AI berdasarkan konten dokumen
+- Mendapatkan ringkasan dokumen
+- Mengelola dokumen dan riwayat chat
 
-### 2. System Architecture
+### 1.2 Key Features
+- **Document Upload & Processing**: Upload dan pemrosesan dokumen dengan ekstraksi teks
+- **RAG (Retrieval-Augmented Generation)**: Chat AI yang menggunakan konten dokumen sebagai konteks
+- **User Management**: Autentikasi dengan password dan Google OAuth
+- **Admin Panel**: Manajemen user, dokumen, dan monitoring aktivitas
+- **Document Summarization**: Pembuatan ringkasan dokumen otomatis
 
-#### 2.1 High-Level Architecture
+## 2. System Architecture
+
+### 2.1 High-Level Architecture
+
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Frontend      │    │    Backend      │    │   External      │
-│   (Web UI)      │◄──►│   (FastAPI)     │◄──►│   Services      │
+│   (HTML/JS)     │◄──►│   (FastAPI)     │◄──►│   Services      │
 │                 │    │                 │    │                 │
-│ - HTML/CSS/JS   │    │ - REST API      │    │ - Ollama LLM    │
-│ - Auth UI       │    │ - Auth Service  │    │ - Google OAuth  │
-│ - Chat UI       │    │ - Chat Service  │    │                 │
-│ - Upload UI     │    │ - RAG Service   │    │                 │
+│ - User Interface│    │ - API Endpoints │    │ - Ollama LLM    │
+│ - Authentication│    │ - Business Logic│    │ - Google OAuth  │
+│ - File Upload   │    │ - Data Processing│   │ - MySQL DB      │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
-                                │
-                                ▼
-                       ┌─────────────────┐
-                       │    Database     │
-                       │    (MySQL)      │
-                       │                 │
-                       │ - Users         │
-                       │ - Documents     │
-                       │ - Chat Sessions │
-                       └─────────────────┘
+                              │
+                              ▼
+                    ┌─────────────────┐
+                    │   Data Layer    │
+                    │                 │
+                    │ - File Storage  │
+                    │ - Vector Store  │
+                    │ - Database      │
+                    └─────────────────┘
 ```
 
-#### 2.2 Technology Stack
+### 2.2 Detailed Component Architecture
 
-**Frontend:**
-- HTML5, CSS3, JavaScript (Vanilla)
-- Responsive Design
-- Google Identity Services
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                           Frontend Layer                          │
+├──────────────────────────────────────────────────────────────────┤
+│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ │
+│ │   Login     │ │  Document   │ │    Chat     │ │   Admin     │ │
+│ │  Component  │ │  Manager    │ │  Interface  │ │   Panel     │ │
+│ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ │
+└──────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                        API Gateway Layer                          │
+├──────────────────────────────────────────────────────────────────┤
+│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ │
+│ │    Auth     │ │  Documents  │ │    Chat     │ │    Admin    │ │
+│ │   Router    │ │   Router    │ │   Router    │ │   Router    │ │
+│ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ │
+└──────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                       Business Logic Layer                        │
+├──────────────────────────────────────────────────────────────────┤
+│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ │
+│ │    Auth     │ │    RAG      │ │    Chat     │ │Summarization│ │
+│ │   Service   │ │   Service   │ │   Service   │ │   Service   │ │
+│ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ │
+└──────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                         Data Access Layer                         │
+├──────────────────────────────────────────────────────────────────┤
+│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ │
+│ │   MySQL     │ │    File     │ │   Vector    │ │   Session   │ │
+│ │  Database   │ │   Storage   │ │   Store     │ │   Manager   │ │
+│ │             │ │   (Local)   │ │   (FAISS)   │ │             │ │
+│ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ │
+└──────────────────────────────────────────────────────────────────┘
+```
 
-**Backend:**
-- FastAPI (Python)
-- Uvicorn ASGI Server
-- Pydantic for data validation
-- JWT for authentication
+## 3. Component Details
 
-**Database:**
-- MySQL
-- Connection pooling
+### 3.1 Frontend Components
 
-**AI/ML:**
-- Ollama (Local LLM)
-- LangChain framework
-- FAISS vector store
-- Document processing (PyPDF, docx2txt)
+#### 3.1.1 Technology Stack
+- **HTML5**: Struktur halaman web
+- **CSS3**: Styling dan responsive design
+- **Vanilla JavaScript**: Interaksi user dan API calls
+- **Google OAuth SDK**: Autentikasi Google
 
-**Security:**
-- JWT tokens
-- Google OAuth2
-- CORS middleware
-- Password hashing (bcrypt)
+#### 3.1.2 Key Components
+- **Authentication Manager**: Mengelola login/logout dan token management
+- **Document Upload Interface**: Drag & drop file upload dengan progress indicator
+- **Chat Interface**: Real-time chat dengan AI
+- **Admin Dashboard**: Monitoring dan manajemen sistem
 
-### 3. System Components
+### 3.2 Backend Components
 
-#### 3.1 Frontend Components
+#### 3.2.1 Technology Stack
+- **FastAPI**: Web framework untuk API development
+- **Pydantic**: Data validation dan serialization
+- **JWT**: Token-based authentication
+- **Uvicorn**: ASGI server
 
-**Authentication Module:**
-- Login/Register forms
+#### 3.2.2 API Routers
+
+**Authentication Router (`/api/v1/auth`)**
+- User registration dan login
 - Google OAuth integration
-- Session management
-- Role-based UI rendering
+- JWT token management
+- User profile management
 
-**Document Management:**
-- File upload interface (drag & drop)
-- Document listing
-- File validation
-- Progress indicators
+**Documents Router (`/api/v1/documents`)**
+- File upload dan processing
+- Document metadata management
+- File format validation
 
-**Chat Interface:**
-- Real-time chat UI
-- Document selection for chat context
-- Message history
-- Typing indicators
+**Chat Router (`/api/v1/chat`)**
+- Message processing
+- RAG integration
+- Chat history management
 
-**Admin Panel:**
+**Admin Router (`/api/v1/admin`)**
 - User management
 - System statistics
-- Document oversight
+- Document management
+- Activity monitoring
 
-#### 3.2 Backend Components
+**Summarization Router (`/api/v1/summarization`)**
+- Document summarization
+- Length customization
+- Multi-document summarization
 
-**API Layer (`/api/routers/`):**
-- `auth.py` - Authentication endpoints
-- `documents.py` - Document management
-- `chat.py` - Chat functionality
-- `admin.py` - Administrative functions
+### 3.3 Business Logic Services
 
-**Service Layer (`/services/`):**
-- `auth_service.py` - Authentication logic
-- `chat_service.py` - Chat processing
-- `rag_service.py` - RAG implementation
+#### 3.3.1 Authentication Service
+```python
+class AuthService:
+    - authenticate_user(username, password)
+    - authenticate_google_user(credential)
+    - create_access_token(username)
+    - register_user(username, email, password)
+    - hash_password(password)
+    - verify_password(password, hashed)
+```
 
-**Core Layer (`/core/`):**
-- `config.py` - Configuration management
+#### 3.3.2 RAG Service
+```python
+class RAGService:
+    - load_documents(file_paths)
+    - split_documents(documents)
+    - create_embeddings(texts)
+    - build_vector_store(embeddings)
+    - similarity_search(query, k=5)
+    - generate_response(query, context)
+```
 
-**Data Layer (`/db/`):**
-- `session.py` - Database connection management
+#### 3.3.3 Chat Service
+```python
+class ChatService:
+    - process_message(message, document_ids, session_id, username)
+    - get_relevant_documents(message, document_ids)
+    - generate_ai_response(message, context)
+    - save_chat_history(message, response, session_id, username)
+```
 
-**Schemas (`/schemas/`):**
-- `user.py` - User data models
-- `chat.py` - Chat data models
-- `document.py` - Document data models
+#### 3.3.4 Summarization Service
+```python
+class SummarizationService:
+    - summarize_documents(document_ids, length)
+    - extract_document_content(document_ids)
+    - generate_summary(content, length)
+```
 
-### 4. Database Design
+## 4. Data Architecture
 
-#### 4.1 Entity Relationship Diagram
+### 4.1 Database Schema (MySQL)
+
+#### 4.1.1 Users Table
+```sql
+CREATE TABLE users (
+    username VARCHAR(50) PRIMARY KEY,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(255),
+    role ENUM('user', 'admin') DEFAULT 'user',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### 4.1.2 Documents Table
+```sql
+CREATE TABLE documents (
+    id VARCHAR(36) PRIMARY KEY,
+    username VARCHAR(50) NOT NULL,
+    filename VARCHAR(255) NOT NULL,
+    file_path VARCHAR(500) NOT NULL,
+    file_size BIGINT,
+    upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+);
+```
+
+#### 4.1.3 Chat History Table
+```sql
+CREATE TABLE chat_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL,
+    username VARCHAR(50) NOT NULL,
+    message TEXT NOT NULL,
+    response TEXT NOT NULL,
+    document_ids JSON,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+);
+```
+
+### 4.2 File Storage Structure
+```
+uploads/
+├── admin/
+│   ├── document1.pdf
+│   └── document2.docx
+├── user1/
+│   ├── file1.pdf
+│   └── file2.txt
+└── user2/
+    └── presentation.pptx
+```
+
+### 4.3 Vector Store (FAISS)
+```
+vector_store/
+├── unnes_docs.faiss    # FAISS index file
+└── unnes_docs.pkl      # Metadata pickle file
+```
+
+## 5. Data Flow
+
+### 5.1 Document Upload Flow
+```
+1. User selects files → Frontend validation
+2. Files sent to /api/v1/documents/upload
+3. Backend validates file types and sizes
+4. Files saved to uploads/{username}/
+5. Document metadata saved to database
+6. Text extraction and chunking
+7. Embeddings generation
+8. Vector store update
+9. Success response to frontend
+```
+
+### 5.2 Chat Processing Flow
+```
+1. User sends message → Frontend
+2. Message sent to /api/v1/chat
+3. Authentication validation
+4. Relevant documents retrieval from vector store
+5. Context preparation
+6. LLM query to Ollama
+7. Response generation
+8. Chat history saved to database
+9. Response sent to frontend
+```
+
+### 5.3 Authentication Flow
+```
+1. User login → Frontend
+2. Credentials sent to /api/v1/auth/token
+3. User validation against database
+4. JWT token generation
+5. Token sent to frontend
+6. Token stored in localStorage
+7. Token included in subsequent API calls
+```
+
+## 6. External Dependencies
+
+### 6.1 Ollama LLM
+- **Purpose**: Large Language Model untuk chat dan summarization
+- **Default Model**: mistral:7b
+- **Connection**: HTTP API ke localhost:11434
+- **Fallback**: Error handling jika service tidak tersedia
+
+### 6.2 Google OAuth
+- **Purpose**: Alternative authentication method
+- **Integration**: Google Identity Services
+- **Configuration**: GOOGLE_CLIENT_ID environment variable
+
+### 6.3 MySQL Database
+- **Purpose**: Primary data storage
+- **Connection**: Connection pooling untuk performance
+- **Backup**: Regular backup strategy diperlukan
+
+## 7. Security Architecture
+
+### 7.1 Authentication & Authorization
+- **JWT Tokens**: Stateless authentication
+- **Password Hashing**: bcrypt untuk password security
+- **Role-Based Access**: User dan Admin roles
+- **Token Expiration**: 60 menit untuk security
+
+### 7.2 Data Protection
+- **Input Validation**: Pydantic schemas untuk semua input
+- **File Type Validation**: Whitelist file extensions
+- **SQL Injection Prevention**: Parameterized queries
+- **XSS Prevention**: Input sanitization
+
+### 7.3 Access Control
+- **User Isolation**: Users hanya akses dokumen sendiri
+- **Admin Privileges**: Full access dengan restrictions
+- **File Access**: Path traversal prevention
+
+## 8. Performance Considerations
+
+### 8.1 Database Optimization
+- **Indexing**: Primary keys dan foreign keys
+- **Connection Pooling**: Efficient database connections
+- **Query Optimization**: Efficient SQL queries
+
+### 8.2 File Processing
+- **Async Processing**: Non-blocking file uploads
+- **Chunking Strategy**: Optimal chunk size (1000 chars)
+- **Batch Processing**: Multiple files processing
+
+### 8.3 Vector Store Optimization
+- **FAISS Index**: Efficient similarity search
+- **Incremental Updates**: Add/remove documents efficiently
+- **Memory Management**: Optimal embedding storage
+
+## 9. Scalability Architecture
+
+### 9.1 Horizontal Scaling Options
+- **Load Balancer**: Multiple FastAPI instances
+- **Database Clustering**: MySQL master-slave setup
+- **File Storage**: Distributed file system (future)
+- **Vector Store**: Distributed vector databases (future)
+
+### 9.2 Caching Strategy
+- **Redis Integration**: Session dan response caching
+- **Embedding Cache**: Frequently accessed embeddings
+- **Static File Caching**: Frontend assets
+
+## 10. Monitoring & Logging
+
+### 10.1 Application Monitoring
+- **Health Checks**: /health endpoint untuk monitoring
+- **Performance Metrics**: Response time tracking
+- **Error Tracking**: Comprehensive error logging
+
+### 10.2 Business Metrics
+- **User Activity**: Login frequency, document uploads
+- **System Usage**: Chat volume, document processing
+- **Admin Dashboard**: Real-time system statistics
+
+## 11. Deployment Architecture
+
+### 11.1 Development Environment
+```
+┌─────────────────┐
+│   Local Dev     │
+├─────────────────┤
+│ - FastAPI       │
+│ - MySQL Local   │
+│ - Ollama Local  │
+│ - File Storage  │
+└─────────────────┘
+```
+
+### 11.2 Production Environment (Recommended)
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│     Users       │    │   Documents     │    │  Chat_Sessions  │
+│   Web Server    │    │   App Server    │    │   Database      │
 ├─────────────────┤    ├─────────────────┤    ├─────────────────┤
-│ id (PK)         │    │ id (PK)         │    │ id (PK)         │
-│ username        │    │ filename        │    │ user_id (FK)    │
-│ email           │◄──►│ user_id (FK)    │◄──►│ document_ids    │
-│ password        │    │ file_path       │    │ created_at      │
-│ role            │    │ file_size       │    │ updated_at      │
-│ created_at      │    │ file_type       │    └─────────────────┘
-└─────────────────┘    │ created_at      │
-                       └─────────────────┘
-                                │
-                                ▼
-                       ┌─────────────────┐
-                       │   Chat_Messages │
-                       ├─────────────────┤
-                       │ id (PK)         │
-                       │ session_id (FK) │
-                       │ message_type    │
-                       │ content         │
-                       │ timestamp       │
-                       └─────────────────┘
+│ - Nginx         │◄──►│ - FastAPI       │◄──►│ - MySQL         │
+│ - SSL/TLS       │    │ - Gunicorn      │    │ - Backup        │
+│ - Static Files  │    │ - Workers       │    │ - Replication   │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                              │
+                              ▼
+                    ┌─────────────────┐
+                    │   AI Services   │
+                    ├─────────────────┤
+                    │ - Ollama        │
+                    │ - GPU Support   │
+                    │ - Model Cache   │
+                    └─────────────────┘
 ```
 
-#### 4.2 Table Specifications
+## 12. Configuration Management
 
-**Users Table:**
-- Primary authentication and user management
-- Role-based access control (user/admin)
-- UNNES email domain validation
+### 12.1 Environment Variables
+```env
+# Application
+APP_SECRET_KEY=secure_secret_key
+ENVIRONMENT=production
 
-**Documents Table:**
-- File metadata storage
-- User ownership tracking
-- File type and size validation
+# Database
+DB_HOST=localhost
+DB_USER=app_user
+DB_PASSWORD=secure_password
+DB_NAME=unnes_chat_db
 
-**Chat_Sessions Table:**
-- Chat context management
-- Multi-document chat support
-- Session persistence
+# AI Services
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=mistral:7b
 
-**Chat_Messages Table:**
-- Message history storage
-- User and AI message differentiation
-- Timestamp tracking
+# External Services
+GOOGLE_CLIENT_ID=google_oauth_client_id
 
-### 5. Security Design
-
-#### 5.1 Authentication & Authorization
-
-**Multi-factor Authentication:**
-- Username/password authentication
-- Google OAuth2 integration
-- JWT token-based sessions
-
-**Authorization Levels:**
-- User: Document upload, chat, profile management
-- Admin: User management, system oversight
-
-**Security Measures:**
-- Password hashing with bcrypt
-- JWT token expiration
-- CORS protection
-- Input validation and sanitization
-- File type validation
-- Email domain restriction (@students.unnes.ac.id, @mail.unnes.ac.id)
-
-#### 5.2 Data Protection
-
-**File Security:**
-- User-isolated file storage
-- File type validation
-- Size limitations
-- Secure file paths
-
-**Database Security:**
-- Connection pooling
-- Prepared statements
-- Error handling without information leakage
-
-### 6. AI/RAG System Design
-
-#### 6.1 RAG Architecture
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Document      │    │   Vector        │    │   LLM Query     │
-│   Processing    │───►│   Store         │───►│   Processing    │
-│                 │    │   (FAISS)       │    │   (Ollama)      │
-│ - PDF parsing   │    │                 │    │                 │
-│ - Text chunking │    │ - Embeddings    │    │ - Context       │
-│ - Preprocessing │    │ - Similarity    │    │ - Generation    │
-└─────────────────┘    │   search        │    │ - Response      │
-                       └─────────────────┘    └─────────────────┘
+# Admin
+DEFAULT_ADMIN_PASSWORD=secure_admin_password
 ```
 
-#### 6.2 Document Processing Pipeline
+### 12.2 Configuration Validation
+- **Startup Checks**: Validate all required configurations
+- **Service Health**: Check external service availability
+- **Security Validation**: Ensure secure configurations
 
-1. **File Upload & Validation**
-   - File type checking (PDF, DOCX, TXT)
-   - Size validation
-   - Virus scanning (if implemented)
+## 13. Error Handling Strategy
 
-2. **Text Extraction**
-   - PDF: PyPDF library
-   - DOCX: docx2txt library
-   - TXT: Direct reading
+### 13.1 Error Categories
+- **Authentication Errors**: 401 Unauthorized
+- **Authorization Errors**: 403 Forbidden
+- **Validation Errors**: 422 Unprocessable Entity
+- **Service Errors**: 503 Service Unavailable
+- **System Errors**: 500 Internal Server Error
 
-3. **Text Preprocessing**
-   - Text cleaning and normalization
-   - Chunking (1000 characters, 200 overlap)
-   - Metadata extraction
-
-4. **Vector Embedding**
-   - Text-to-vector conversion
-   - FAISS index creation
-   - Persistent storage
-
-#### 6.3 Chat Processing Flow
-
-1. **Query Processing**
-   - User input validation
-   - Context preparation
-   - Document selection
-
-2. **Retrieval**
-   - Vector similarity search
-   - Relevant chunk extraction
-   - Context ranking
-
-3. **Generation**
-   - Prompt construction
-   - LLM query (Ollama)
-   - Response generation
-
-4. **Response Delivery**
-   - Answer formatting
-   - Source attribution
-   - Chat history update
-
-### 7. API Design
-
-#### 7.1 Authentication Endpoints
-```
-POST /api/v1/auth/token
-POST /api/v1/auth/google
-POST /api/v1/auth/register
-GET  /api/v1/auth/profile
-GET  /api/v1/auth/google-client-id
+### 13.2 Error Response Format
+```json
+{
+  "detail": "Error description",
+  "error_code": "SPECIFIC_ERROR_CODE",
+  "timestamp": "2024-01-01T00:00:00Z",
+  "path": "/api/v1/endpoint"
+}
 ```
 
-#### 7.2 Document Endpoints
-```
-POST /api/v1/documents/upload
-GET  /api/v1/documents/
-GET  /api/v1/documents/{document_id}
-DELETE /api/v1/documents/{document_id}
-```
+## 14. Testing Strategy
 
-#### 7.3 Chat Endpoints
-```
-POST /api/v1/chat/sessions
-GET  /api/v1/chat/sessions
-POST /api/v1/chat/sessions/{session_id}/messages
-GET  /api/v1/chat/sessions/{session_id}/messages
-DELETE /api/v1/chat/sessions/{session_id}
-```
+### 14.1 Unit Testing
+- **Service Layer**: Business logic testing
+- **API Endpoints**: Request/response testing
+- **Data Models**: Validation testing
 
-#### 7.4 Admin Endpoints
-```
-GET  /api/v1/admin/stats
-GET  /api/v1/admin/users
-DELETE /api/v1/admin/users/{user_id}
-GET  /api/v1/admin/documents
-```
+### 14.2 Integration Testing
+- **Database Integration**: CRUD operations
+- **External Services**: Ollama dan Google OAuth
+- **File Processing**: Upload dan processing pipeline
 
-### 8. Performance Considerations
+### 14.3 End-to-End Testing
+- **User Workflows**: Complete user journeys
+- **Admin Functions**: Administrative operations
+- **Error Scenarios**: Error handling validation
 
-#### 8.1 Scalability
-- Database connection pooling
-- Async request handling
-- File storage optimization
-- Vector search optimization
+## 15. Future Enhancements
 
-#### 8.2 Caching Strategy
-- Vector embeddings caching
-- Session data caching
-- Static file caching
+### 15.1 Technical Improvements
+- **Microservices Architecture**: Service decomposition
+- **Container Orchestration**: Docker dan Kubernetes
+- **Message Queue**: Async processing dengan Redis/RabbitMQ
+- **CDN Integration**: Static file delivery optimization
 
-#### 8.3 Resource Management
-- File size limitations
-- Concurrent user handling
-- Memory management for large documents
-- LLM response timeout handling
+### 15.2 Feature Enhancements
+- **Multi-language Support**: Internationalization
+- **Advanced Analytics**: User behavior tracking
+- **Mobile Application**: React Native atau Flutter
+- **Real-time Collaboration**: WebSocket integration
 
-### 9. Deployment Architecture
+### 15.3 AI/ML Improvements
+- **Model Fine-tuning**: Domain-specific model training
+- **Multi-modal Support**: Image dan video processing
+- **Advanced RAG**: Graph-based retrieval
+- **Personalization**: User-specific recommendations
 
-#### 9.1 Development Environment
-- Local Ollama instance
-- Local MySQL database
-- Development server (Uvicorn)
+---
 
-#### 9.2 Production Considerations
-- Reverse proxy (Nginx)
-- SSL/TLS termination
-- Database clustering
-- Load balancing
-- Monitoring and logging
-
-### 10. Error Handling & Logging
-
-#### 10.1 Error Categories
-- Authentication errors
-- File processing errors
-- Database connection errors
-- AI service errors
-- Validation errors
-
-#### 10.2 Logging Strategy
-- Request/response logging
-- Error tracking
-- Performance monitoring
-- Security event logging
-
-### 11. Future Enhancements
-
-#### 11.1 Potential Features
-- Multi-language support
-- Advanced document analytics
-- Collaborative chat sessions
-- Document versioning
-- Advanced admin analytics
-
-#### 11.2 Technical Improvements
-- Microservices architecture
-- Container deployment
-- Advanced caching
-- Real-time notifications
-- Mobile application
-
-This system design provides a comprehensive foundation for the UNNES Document Chat system, ensuring scalability, security, and maintainability while meeting the specific requirements of the UNNES academic environment.
+**Document Version**: 1.0  
+**Last Updated**: 2024  
+**Architecture Type**: Monolithic with Microservice-ready design  
+**Target Scale**: Small to Medium Enterprise
